@@ -165,7 +165,7 @@ object DatabaseHandler {
   private def mapExtractor(rs: WrappedResultSet):Map[String,Any] ={
      var map:Map[String,Any] = Map[String,Any]()
      (1 to rs.metaData.getColumnCount).foreach{ k =>     
-          map = map +(rs.metaData.getColumnClassName(k) -> rs.any(k))      
+          map = map +(rs.metaData.getColumnName(k) -> rs.any(k))      
      }
      map
   }
@@ -341,18 +341,55 @@ object DatabaseHandler {
            this.checkAndCreateSchema(tarr(0))
          }
          
+         var types : Map[String,String] = Map[String,String]()
          val exists = if(tarr.length ==2)this.tableExists(tarr(1),tarr(0)) else this.tableExists(tarr(0), null)
          var keys: Set[String] = Set[String]() 
-         data.get(table).get.foreach{
-           mp =>
-             keys = keys ++ mp.keySet
-         }
+         var mp : Map[String,Any] = Map[String,Any]() 
+         data.get(table).get.foreach({
+             m =>
+                mp = mp ++ m
+         })
+         
+         
+         for(k <- mp.keySet.filterNot { x => keys.contains(x) }){
+                val d = mp.get(k).get
+                if(d.isInstanceOf[String]){
+                  types = types + (k -> "text")
+                }else if(d.isInstanceOf[Int] || d.isInstanceOf[Integer]){
+                  types = types + (k -> "integer")
+                }else if(d.isInstanceOf[Double]){
+                  types = types + (k -> "DOUBLE PRECISION")
+                }else if(d.isInstanceOf[Float]){
+                  types = types + (k -> "real")
+                }else if(d.isInstanceOf[Long]){
+                  types = types + (k -> "bigint")
+                }else if(d.isInstanceOf[Char]){
+                  types = types +(k -> "varchar(1)")
+                }else if(d.isInstanceOf[Boolean]){
+                  types = types + (k -> "bit")
+                }else if(d.isInstanceOf[Array[Byte]]){
+                  types = types + (k -> "VARBINARY")
+                }else if(d.isInstanceOf[java.sql.Date]){
+                  types = types + (k -> "DATE")
+                }else if(d.isInstanceOf[java.sql.Timestamp]){
+                  types = types + (k -> "TIMESTAMP")
+                }else if(d.isInstanceOf[java.sql.Time]){
+                  types = types + (k -> "TIME")
+                }else if(d.isInstanceOf[java.math.BigDecimal]){
+                  types = types + (k -> "NUMERIC")
+                }else{
+                  types = types + (k -> "text") //if it is a scala object, perhaps it will be cast to text
+                }
+          }
+          keys = keys ++ mp.keySet
+             
+         
          
          //if not exists, create it else look at columns and ensure that they exist
          if(!exists){
-           this.createTable(table, keys.map { x => (x,"text") })
+           this.createTable(table, keys.map { x => (x, types.get(x).get) })
          }else{
-           keys.foreach { attribute => this.checkAndCreateColumn(table, attribute, "text") }
+           keys.foreach { attribute => this.checkAndCreateColumn(table, attribute, types.get(attribute).get) }
          }
          
          

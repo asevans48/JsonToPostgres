@@ -134,7 +134,7 @@ class JsonbToPostgresConverter {
 }
 
 
-object Driver{
+object ScalaDriver{
   
   def main(args : Array[String])={
     new JsonbToPostgresConverter().run(args)

@@ -6,7 +6,7 @@ import scopt._
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 final class BadOptionsException(msg:String) extends RuntimeException
-case class Config(offsetColumn:String = null,offsetNumber : Int = 100,query : String = null, outputTable : String = null, jsonColumn : String = null, schema : String = null, kwargs: Map[String,String] = Map[String,String](),maxThreads : Int = Runtime.getRuntime.availableProcessors())
+case class Config(offsetColumn:String = null,offsetNumber : Int = 100,query : String = null, outputTable : String = null, jsonColumn : String = null, schema : String = null, kwargs: Map[String,String] = Map[String,String](),maxThreads : Int = Runtime.getRuntime.availableProcessors(),sampleQuery : String = null)
 
 /**
  * Parse Command Line Arguments.
@@ -34,6 +34,9 @@ object CommandLineParser {
     }
     opt[String]('s',"schema") action { (x,c) => c.copy(schema = x)} text("Schema name for the tables.") validate {x => 
       if(x == null) failure("Must Specify Output Table (-s or --schema)")  else success
+    }
+    opt[String]('b',"sampleQuery") action { (x,c) => c.copy(sampleQuery = x)} text("Sample Query for building tables.") validate {x => 
+      if(x == null) failure("Must Specify Output Table (-b or --sampleQuery)")  else success
     }
     opt[Int]('t',"maxThreads") action { (x,c) => c.copy(maxThreads = x)} text("Maximum number of threads.") validate {x => 
       if(x < 1) failure("Max Threads must be greater than 0.")  else success

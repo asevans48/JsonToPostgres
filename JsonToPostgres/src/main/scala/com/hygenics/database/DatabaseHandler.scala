@@ -6,6 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 
+import scala.collection.convert.decorateAsScala._
+import scala.collection.concurrent.{Map => ConcurrentMap}
+
 
 /**
  * A building list of functions for Inserting and Retreiving data
@@ -17,10 +20,13 @@ import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
  * queries using the environment variable || driverClassName check from 
  * https://github.com/seratch/scalikejdbc/blob/master/scalikejdbc-interpolation/src/test/scala/scalikejdbc/QueryInterfaceSpec.scala
  * 
- * @author aevans
+ * @author Andrew Evans
+ * Copyright 2016
+ * License : Free BSD
  */
 object DatabaseHandler {
- private val mapper=new ObjectMapper() with ScalaObjectMapper
+  private var types : ConcurrentMap[String,String] = new java.util.concurrent.ConcurrentHashMap().asScala
+  private val mapper=new ObjectMapper() with ScalaObjectMapper
   mapper.registerModule(DefaultScalaModule)
   private var dbName:Symbol = 'legacy
   private var mappingList:scala.collection.immutable.Map[String,List[scala.collection.immutable.Map[String,Any]]] = scala.collection.immutable.Map[String,List[scala.collection.immutable.Map[String,Any]]]()
@@ -321,6 +327,127 @@ object DatabaseHandler {
   }
   
   /**
+   * This method checks for the existance of columns and generates tables from a sample.
+   *  
+   * @param    data                  A mapping in the form Map[String,List[Map[String,Any]]] containing column -> data pairs
+   * @see      Database#batchUpdate
+   */
+  def checkSample(data:scala.collection.immutable.Map[String,List[scala.collection.immutable.Map[String,Any]]]):Unit={
+       data.keySet.foreach{
+       table =>
+         //check for table existance
+         val tarr = table.split("\\.")
+         
+         if(tarr.length ==2){
+           this.checkAndCreateSchema(tarr(0))
+         }
+         
+         val exists = if(tarr.length ==2)this.tableExists(tarr(1),tarr(0)) else this.tableExists(tarr(0), null)
+         var keys: Set[String] = Set[String]() 
+         var mp : Map[String,Any] = Map[String,Any]() 
+         data.get(table).get.foreach({
+             m =>
+                mp = mp ++ m
+         })
+         
+         
+         for(k <- mp.keySet.filterNot { x => keys.contains(x) }){
+                val d = mp.get(k).get
+                if(!types.contains(k)){
+                  if(d.isInstanceOf[String]){
+                    types.putIfAbsent(k, "text")
+                  }else if(d.isInstanceOf[Int] || d.isInstanceOf[Integer]){
+                    types.putIfAbsent(k, "integer")
+                  }else if(d.isInstanceOf[Double]){
+                    types.putIfAbsent(k, "DOUBLE PRECISION")
+                  }else if(d.isInstanceOf[Float]){
+                    types.putIfAbsent(k, "real")
+                  }else if(d.isInstanceOf[Long]){
+                    types.putIfAbsent(k, "bigint")
+                  }else if(d.isInstanceOf[Char]){
+                    types.putIfAbsent(k, "varchar(1)")
+                  }else if(d.isInstanceOf[Boolean]){
+                    types.putIfAbsent(k, "bit")
+                  }else if(d.isInstanceOf[Array[Byte]]){
+                    types.putIfAbsent(k, "VARBINARY")
+                  }else if(d.isInstanceOf[java.sql.Date]){
+                    types.putIfAbsent(k, "DATE")
+                  }else if(d.isInstanceOf[java.sql.Timestamp]){
+                    types.putIfAbsent(k, "TIMESTAMP")
+                  }else if(d.isInstanceOf[java.sql.Time]){
+                    types.putIfAbsent(k, "TIME")
+                  }else if(d.isInstanceOf[java.math.BigDecimal]){
+                    types.putIfAbsent(k, "NUMERIC")
+                  }else{
+                    types.putIfAbsent(k, "text")//if it is a scala object, perhaps it will be cast to text
+                  }
+                }else{
+                  //check that column matches that for set type, move to text otherwise
+                  if(!types.get(k).get.equals("text")){
+                    if(d.isInstanceOf[String]){
+                       types.update(k, "text")
+                    }else if(d.isInstanceOf[Int] || d.isInstanceOf[Integer]){
+                      if(!types.get(k).get.equals("integer")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[Double]){
+                      if(!types.get(k).get.equals("DOUBLE PRECISION")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[Float]){
+                      if(!types.get(k).get.equals("real")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[Long]){
+                      if(!types.get(k).get.equals("bigint")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[Char]){
+                      if(!types.get(k).get.equals("varchar(1)")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[Boolean]){
+                      if(!types.get(k).get.equals("bit")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[Array[Byte]]){
+                      if(!types.get(k).get.equals("VARBINARY")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[java.sql.Date]){
+                      if(!types.get(k).get.equals("DATE")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[java.sql.Timestamp]){
+                      if(!types.get(k).get.equals("TIMESTAMP")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[java.sql.Time]){
+                      if(!types.get(k).get.equals("TIME")){
+                        types.update(k, "text")
+                      }
+                    }else if(d.isInstanceOf[java.math.BigDecimal]){
+                      if(!types.get(k).get.equals("NUMERIC")){
+                        types.update(k, "text")
+                      }
+                    }
+                  }
+                }
+          }
+          keys = keys ++ mp.keySet
+             
+         
+         
+         //if not exists, create it else look at columns and ensure that they exist
+         if(!exists){
+           this.createTable(table, keys.map { x => (x, types.get(x).get) })
+         }else{
+           keys.foreach { attribute => this.checkAndCreateColumn(table, attribute, types.get(attribute).get) }
+         }
+       }
+  }
+  
+  /**
    * Posts Mapping Lists to a table. The mappings are contained in a Mapping of [table_name,List[Map[column,data]]]
    * This is mainly for crawling and extraction where original data is best stored in strings pre-conversion
    * so that no data is lost due to encodings and other issues. New tables and columns are created using strings.
@@ -341,7 +468,6 @@ object DatabaseHandler {
            this.checkAndCreateSchema(tarr(0))
          }
          
-         var types : Map[String,String] = Map[String,String]()
          val exists = if(tarr.length ==2)this.tableExists(tarr(1),tarr(0)) else this.tableExists(tarr(0), null)
          var keys: Set[String] = Set[String]() 
          var mp : Map[String,Any] = Map[String,Any]() 
@@ -353,32 +479,34 @@ object DatabaseHandler {
          
          for(k <- mp.keySet.filterNot { x => keys.contains(x) }){
                 val d = mp.get(k).get
-                if(d.isInstanceOf[String]){
-                  types = types + (k -> "text")
-                }else if(d.isInstanceOf[Int] || d.isInstanceOf[Integer]){
-                  types = types + (k -> "integer")
-                }else if(d.isInstanceOf[Double]){
-                  types = types + (k -> "DOUBLE PRECISION")
-                }else if(d.isInstanceOf[Float]){
-                  types = types + (k -> "real")
-                }else if(d.isInstanceOf[Long]){
-                  types = types + (k -> "bigint")
-                }else if(d.isInstanceOf[Char]){
-                  types = types +(k -> "varchar(1)")
-                }else if(d.isInstanceOf[Boolean]){
-                  types = types + (k -> "bit")
-                }else if(d.isInstanceOf[Array[Byte]]){
-                  types = types + (k -> "VARBINARY")
-                }else if(d.isInstanceOf[java.sql.Date]){
-                  types = types + (k -> "DATE")
-                }else if(d.isInstanceOf[java.sql.Timestamp]){
-                  types = types + (k -> "TIMESTAMP")
-                }else if(d.isInstanceOf[java.sql.Time]){
-                  types = types + (k -> "TIME")
-                }else if(d.isInstanceOf[java.math.BigDecimal]){
-                  types = types + (k -> "NUMERIC")
-                }else{
-                  types = types + (k -> "text") //if it is a scala object, perhaps it will be cast to text
+                if(!types.contains(k)){
+                  if(d.isInstanceOf[String]){
+                    types.putIfAbsent(k, "text")
+                  }else if(d.isInstanceOf[Int] || d.isInstanceOf[Integer]){
+                    types.putIfAbsent(k, "integer")
+                  }else if(d.isInstanceOf[Double]){
+                    types.putIfAbsent(k, "DOUBLE PRECISION")
+                  }else if(d.isInstanceOf[Float]){
+                    types.putIfAbsent(k, "real")
+                  }else if(d.isInstanceOf[Long]){
+                    types.putIfAbsent(k, "bigint")
+                  }else if(d.isInstanceOf[Char]){
+                    types.putIfAbsent(k, "varchar(1)")
+                  }else if(d.isInstanceOf[Boolean]){
+                    types.putIfAbsent(k, "bit")
+                  }else if(d.isInstanceOf[Array[Byte]]){
+                    types.putIfAbsent(k, "VARBINARY")
+                  }else if(d.isInstanceOf[java.sql.Date]){
+                    types.putIfAbsent(k, "DATE")
+                  }else if(d.isInstanceOf[java.sql.Timestamp]){
+                    types.putIfAbsent(k, "TIMESTAMP")
+                  }else if(d.isInstanceOf[java.sql.Time]){
+                    types.putIfAbsent(k, "TIME")
+                  }else if(d.isInstanceOf[java.math.BigDecimal]){
+                    types.putIfAbsent(k, "NUMERIC")
+                  }else{
+                    types.putIfAbsent(k, "text")//if it is a scala object, perhaps it will be cast to text
+                  }
                 }
           }
           keys = keys ++ mp.keySet

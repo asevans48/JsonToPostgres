@@ -20,7 +20,9 @@ import scala.collection.concurrent.{Map => ConcurrentMap}
  * queries using the environment variable || driverClassName check from 
  * https://github.com/seratch/scalikejdbc/blob/master/scalikejdbc-interpolation/src/test/scala/scalikejdbc/QueryInterfaceSpec.scala
  * 
- * @author aevans
+ * @author Andrew Evans
+ * Copyright 2016
+ * License : Free BSD
  */
 object DatabaseHandler {
   private var types : ConcurrentMap[String,String] = new java.util.concurrent.ConcurrentHashMap().asScala

@@ -11,7 +11,9 @@ case class Config(offsetColumn:String = null,offsetNumber : Int = 100,query : St
 /**
  * Parse Command Line Arguments.
  * 
- * @author aevans
+ * @author Andrew Evans
+ * Copyright 2016
+ * License : Free BSD
  */
 object CommandLineParser {
   

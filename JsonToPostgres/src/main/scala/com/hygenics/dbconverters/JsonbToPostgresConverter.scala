@@ -20,7 +20,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Random,Try,Success,Failure}
 
 
-
+/**
+ * Convert JsonB to PostgreSQL tables accounting for multiple levels of Json
+ * 
+ * @author Andrew Evans
+ * Copyright 2016
+ * License : Free BSD
+ */
 class JsonbToPostgresConverter {
     val mapper = new ObjectMapper with ScalaObjectMapper
     mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)

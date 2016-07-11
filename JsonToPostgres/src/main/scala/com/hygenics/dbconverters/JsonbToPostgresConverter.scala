@@ -187,7 +187,7 @@ class JsonbToPostgresConverter {
           var start = offInc * it - 1
           println(start)
           for(i <- 0 until maxThreads){
-            futs = futs :+ this.getData(sql + " WHERE "+this.offsetColumn+" > "+(start + i * inc)+" AND "+this.offsetColumn+" <= "+(start + ((i + 1) * inc))).flatMap({x => this.convert(x)}).flatMap { x => this.post(x) }
+            futs = futs :+ this.getData(sql + " WHERE "+this.offsetColumn+" >= "+(start + i * inc)+" AND "+this.offsetColumn+" < "+(start + ((i + 1) * inc))).flatMap({x => this.convert(x)}).flatMap { x => this.post(x) }
           }
           it += 1
           

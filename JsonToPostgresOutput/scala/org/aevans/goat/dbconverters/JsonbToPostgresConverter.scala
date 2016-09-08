@@ -95,8 +95,16 @@ class JsonbToPostgresConverter {
        }
        
       for(rec <- recordList){
-        val jMap : Map[String,Any] = mapper.readValue[Map[String,Any]](rec.get(this.jsonColumn).get.asInstanceOf[String])
-        records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn))
+        var jdata = rec.get(this.jsonColumn).get.asInstanceOf[String]
+        if(jdata.trim.startsWith("[")){
+          jdata = s"""{"$jsonColumn": $jdata}"""
+          val jMap : Map[String,Any] = mapper.readValue[Map[String,Any]](jdata)
+          val newTable = if(this.tableName.contains(".")) this.tableName.replaceAll("\\.*","."+this.jsonColumn) else this.jsonColumn
+          records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn))
+        }else{
+          val jMap : Map[String,Any] = mapper.readValue[Map[String,Any]](jdata)
+          records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn))
+        }
       }
       
       records

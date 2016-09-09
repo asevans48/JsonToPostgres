@@ -65,49 +65,56 @@ class JsonbToPostgresConverter {
       DatabaseHandler.queryForMapList(sql) 
     }
     
-    def convert(recordList : List[Map[String,Any]],offsetColumn : String):Future[List[Map[String,List[Map[String,Any]]]]] = Future{
+    def convert(recordList : List[Map[String,Any]],offsetColumn : String,jsonAlias : String = null):Future[List[Map[String,List[Map[String,Any]]]]] = Future{
       var records: List[Map[String,List[Map[String,Any]]]] = List[Map[String,List[Map[String,Any]]]]()
       
-      def buildRecords(table : String,jmap : Map[String,Any]):List[Map[String,List[Map[String,Any]]]]={
+      def buildRecords(table : String,jmap : Map[String,Any],tableName :String):List[Map[String,List[Map[String,Any]]]]={
           var record : Map[String,Any] = Map[String,Any]()
-          var orecords =List[Map[String,List[Map[String,Any]]]]()
+          var orecords = List[Map[String,List[Map[String,Any]]]]()
       
           
           for(k <- jmap.keySet){
             val tp = jmap.get(k).getOrElse(null)
-            val krep = k.replaceAll("[^A-Za-z0-9]+","").toLowerCase()
+            val krep = tableName
+            //println(krep)
             if(!tp.isInstanceOf[Map[String,Any]] && !tp.isInstanceOf[List[String]] && !tp.isInstanceOf[List[Map[String,Any]]]){
-              record = record + (EscapeReserved.escapeWord(krep) -> tp)
+              record = record + (EscapeReserved.escapeWord(k.replaceAll("[^A-Za-z0-9]+","").trim) -> tp)
             }else if(tp.isInstanceOf[List[Any]]){
               for(str <- tp.asInstanceOf[List[Any]]){
-                orecords = orecords ++ buildRecords(schema+"."+krep, Map[String,Any]((krep->str),(offsetColumn -> jmap.get(offsetColumn).get)))
+                orecords = orecords ++ buildRecords(schema+"."+tableName, Map[String,Any]((tableName->str),(offsetColumn -> jmap.get(offsetColumn).get)),tableName)
               }
             }else if(tp.isInstanceOf[List[Map[String,Any]]]){
               for(mp <- tp.asInstanceOf[List[Map[String,Any]]]){
-                orecords = orecords ++ buildRecords(schema+"."+krep,mp + (offsetColumn->jmap.get(offsetColumn).get))
+                orecords = orecords ++ buildRecords(schema+"."+tableName,mp + (offsetColumn->jmap.get(offsetColumn).get),tableName)
               }
             }else if(tp.isInstanceOf[Map[String,Any]]){
-              orecords = orecords ++ buildRecords(schema+"."+krep,tp.asInstanceOf[Map[String,Any]] + (offsetColumn ->jmap.get(offsetColumn).get))    
+              orecords = orecords ++ buildRecords(schema+"."+tableName,tp.asInstanceOf[Map[String,Any]] + (offsetColumn ->jmap.get(offsetColumn).get),tableName)    
             }
           }
-          orecords = orecords ++ List(Map((table -> List[Map[String,Any]](record))))
-          orecords
+          
+          if(record.size > 0){
+            orecords = orecords ++ List(Map((table -> List[Map[String,Any]](record))))
+          }
+          
+          orecords.filter(p => !p.isEmpty)
        }
        
       for(rec <- recordList){
-        var jdata = rec.get(this.jsonColumn).get.asInstanceOf[String]
-        if(jdata.trim.startsWith("[")){
-          jdata = s"""{"$jsonColumn": $jdata}"""
-          val jMap : Map[String,Any] = mapper.readValue[Map[String,Any]](jdata)
-          val newTable = if(this.tableName.contains(".")) this.tableName.replaceAll("\\.*","."+this.jsonColumn) else this.jsonColumn
-          records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn))
-        }else{
-          val jMap : Map[String,Any] = mapper.readValue[Map[String,Any]](jdata)
-          records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn))
-        }
+          var jdata = rec.get(this.jsonColumn).get.asInstanceOf[String]
+          val jmp = mapper.readValue[Any](jdata)
+          if(jmp.isInstanceOf[List[Any]]){
+            val colName = if(jsonAlias != null) jsonAlias else jsonColumn
+            jdata = s"""{"$colName": $jdata}"""
+            val jMap : Map[String,Any] = mapper.readValue[Map[String,Any]](jdata)
+            val newTable = if(this.tableName.contains(".")) this.tableName.replaceAll("\\.*","."+colName) else colName
+            records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn),colName)
+          }else{
+            val jMap : Map[String,Any] = jmp.asInstanceOf[Map[String,Any]]
+            records = records ++ buildRecords(this.tableName, jMap ++ (rec - jsonColumn),jsonColumn)
+          }
       }
       
-      records
+      records.filter(p => !p.isEmpty)
     }
     
     
@@ -151,15 +158,16 @@ class JsonbToPostgresConverter {
          var postList : Map[String,List[Map[String,Any]]] = Map[String,List[Map[String,Any]]]()
          
          dataList.foreach({mappings => 
-            mappings.keySet.foreach({
-              k =>
-                if(tnames.contains(k)){
-                   postList = postList.updated(k,postList.get(k).get ++ mappings.get(k).get)
-                }else{
-                  postList = postList + (k -> mappings.get(k).get)
-                  tnames = tnames + k
-                }
-            })
+              mappings.keySet.foreach({
+                k =>
+                  if(tnames.contains(k)){
+                     postList = postList.updated(k,postList.get(k).get ++ mappings.get(k).get)
+                  }else{
+                    postList = postList + (k -> mappings.get(k).get)
+                    tnames = tnames + k
+                  }
+              })
+           
          })
          
          //post data
@@ -188,6 +196,7 @@ class JsonbToPostgresConverter {
       assert(cmd.offsetColumn != null)
       assert(cmd.jsonColumn != null)
       assert(cmd.schema !=  null)
+      val jsonAlias : String = cmd.jsonAlias
       this.offsetColumn = cmd.offsetColumn
       this.schema = cmd.schema
       this.jsonColumn = cmd.jsonColumn
@@ -202,7 +211,7 @@ class JsonbToPostgresConverter {
       
       //get the sample block
       if(cmd.sampleQuery != null){
-        var futs : List[Future[Boolean]] = List(this.getData(cmd.sampleQuery).flatMap({x => this.convert(x,offsetColumn)}).flatMap { x => this.post(x) })
+        var futs : List[Future[Boolean]] = List(this.getData(cmd.sampleQuery).flatMap({x => this.convert(x,offsetColumn,jsonAlias)}).flatMap { x => this.post(x) })
         val r = Await.ready(Future.sequence(futs), Duration.Inf).value.get
         r match{
           case Success(r)=>{
@@ -221,7 +230,7 @@ class JsonbToPostgresConverter {
           var futs : List[Future[Boolean]] = List[Future[Boolean]]()
           var start = offInc * it - 1
           for(i <- 0 until maxThreads){
-            futs = futs :+ this.getData(sql + " WHERE "+this.offsetColumn+" >= "+(start + i * inc)+" AND "+this.offsetColumn+" < "+(start + ((i + 1) * inc))).flatMap({x => this.convert(x,offsetColumn)}).flatMap { x => this.post(x) }
+            futs = futs :+ this.getData(sql + " WHERE "+this.offsetColumn+" >= "+(start + i * inc)+" AND "+this.offsetColumn+" < "+(start + ((i + 1) * inc))).flatMap({x => this.convert(x,offsetColumn,jsonAlias)}).flatMap { x => this.post(x) }
           }
           it += 1
           

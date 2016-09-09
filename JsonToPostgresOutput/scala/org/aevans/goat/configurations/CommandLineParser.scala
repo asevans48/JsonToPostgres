@@ -6,7 +6,7 @@ import scopt._
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 final class BadOptionsException(msg:String) extends RuntimeException
-case class Config(offsetColumn:String = null,offsetNumber : Int = 100,query : String = null, outputTable : String = null, jsonColumn : String = null, schema : String = null, kwargs: Map[String,String] = Map[String,String](),maxThreads : Int = Runtime.getRuntime.availableProcessors(),sampleQuery : String = null)
+case class Config(offsetColumn:String = null,offsetNumber : Int = 100,query : String = null, outputTable : String = null, jsonColumn : String = null, schema : String = null,jsonAlias : String = null, kwargs: Map[String,String] = Map[String,String](),maxThreads : Int = Runtime.getRuntime.availableProcessors(),sampleQuery : String = null)
 
 /**
  * Parse Command Line Arguments.
@@ -41,6 +41,7 @@ object CommandLineParser {
     opt[Int]('t',"maxThreads") action { (x,c) => c.copy(maxThreads = x)} text("Maximum number of threads.") validate {x => 
       if(x < 1) failure("Max Threads must be greater than 0.")  else success
     }
+    opt[String]('a',"jsonAlias") action { (x,c) => c.copy(jsonAlias = x)} text("Data Alias to use if Wanted. Recommended if table is a list of records without a name.")
     opt[Map[String,String]]("kwargs") valueName("k1=v1,k2=v2...") action{ (x,c) => c.copy(kwargs = x) } text("Additional Arguments to Use. Pleas see the Documentation.") 
    }
   

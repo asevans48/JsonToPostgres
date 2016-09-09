@@ -92,7 +92,7 @@ class JsonbToPostgresConverter {
             }
           }
           
-          if(record.size > 0){
+          if((record - offsetColumn).size > 0){
             orecords = orecords ++ List(Map((table -> List[Map[String,Any]](record))))
           }
           

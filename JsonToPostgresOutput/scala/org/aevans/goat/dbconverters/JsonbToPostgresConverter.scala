@@ -96,7 +96,7 @@ class JsonbToPostgresConverter {
             orecords = orecords ++ List(Map((table -> List[Map[String,Any]](record))))
           }
           
-          orecords.filter(p => !p.isEmpty)
+          orecords
        }
        
       for(rec <- recordList){
